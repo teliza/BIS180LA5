@@ -1,0 +1,286 @@
+# Assignment_5_2.md
+
+Student Name: Eliza Tsang
+Student ID: 999606858
+
+```{r}
+library(ggplot2)
+vcf.data <- read.table("~/Assignment_5_Tsang.Eliza/SNP_analysis/IMB211_R500.vcf",as.is=T,na.strings = ".")
+head(vcf.data)
+```
+
+```{r}
+vcf.header <- system("grep '#C' ~/Assignment_5_Tsang.Eliza/SNP_analysis/IMB211_R500.vcf",intern = TRUE) 
+vcf.header
+vcf.header <- sub("#","",vcf.header) 
+vcf.header <- unlist(strsplit(vcf.header,split="\t"))
+colnames(vcf.data) <- vcf.header
+View(vcf.data)
+```
+
+```{r}
+system("grep '##INFO' IMB211_R500.vcf")
+system("grep '##FORMAT' IMB211_R500.vcf")
+
+# Before splitting add NAs to blank cells
+
+vcf.data$IMB211[is.na(vcf.data$IMB211)] <- "NA:NA:NA:NA:NA:NA:NA"
+
+IMB211.tmp <- matrix(
+  unlist(strsplit(vcf.data$IMB211,split = ":")),
+  nrow=nrow(vcf.data),
+  byrow=TRUE
+  )
+head(IMB211.tmp)
+colnames(IMB211.tmp) <- paste("IMB211",c("gt","tot.depth","ref.depth","ref.qual","alt.depth","alt.qual","gen.lik"),sep="_")
+
+vcf.data$R500[is.na(vcf.data$R500)] <- "NA:NA:NA:NA:NA:NA:NA"
+
+R500.tmp <- matrix(
+  unlist(strsplit(vcf.data$R500,split = ":")),
+  nrow=nrow(vcf.data),
+  byrow=TRUE
+  )
+head(R500.tmp)
+colnames(R500.tmp) <- paste("R500",c("gt","tot.depth","ref.depth","ref.qual","alt.depth","alt.qual","gen.lik"),sep="_")
+
+vcf.data <- cbind(vcf.data,IMB211.tmp,R500.tmp,stringsAsFactors=FALSE)
+summary(vcf.data)
+
+head(vcf.data)
+vcf.data[,c("IMB211_tot.depth","IMB211_ref.depth","IMB211_ref.qual","IMB211_alt.depth","IMB211_alt.qual",
+            "R500_tot.depth","R500_ref.depth","R500_ref.qual","R500_alt.depth","R500_alt.qual")] <- 
+  apply(vcf.data[,c("IMB211_tot.depth","IMB211_ref.depth","IMB211_ref.qual","IMB211_alt.depth","IMB211_alt.qual",
+            "R500_tot.depth","R500_ref.depth","R500_ref.qual","R500_alt.depth","R500_alt.qual")],
+        2,
+        as.numeric
+        )
+head(vcf.data)
+summary(vcf.data)
+```
+
+**Exercise 1**
+**To explore the quality of our data, make a histogram of genotype quality. It is hard to get a feel for the QUAL scores at the low end, so try making a second histogram that illustrates this region better. (Hint: one option is to subset the data)**
+
+```{r}
+QUALL<-subset(vcf.data, QUAL < 500)
+QUALR<-subset(vcf.data, QUAL>500)
+histo<-ggplot(QUALL,aes(x=QUAL)) + geom_histogram()
+histo
+histo2<-ggplot(QUALR,aes(x=QUAL)) + geom_histogram()
+histo2
+```
+
+
+**Exercise 2**
+**We only want to keep positions that have a reasonable probabilty of being correct.**
+
+**a) At a quality of 40 what is the probability that the SNP call is wrong?**
+
+0.005 chance
+
+**b) Subset the data to only keep positions where the quality score is 40 or greater.**
+
+```{r}
+QUAL40<-subset(vcf.data, QUAL > 40) 
+histo40<-ggplot(QUAL40,aes(x=QUAL)) + geom_histogram()
+histo40
+```
+
+**c) What percentage of SNPs were retained?**
+
+47718/55088 =0.8662141
+
+About 86.6% retained.
+
+```{r}
+#homozygous and heterozygous to each table
+table(QUAL40$IMB211_gt)
+table(QUAL40$R500_gt)
+#count the numbers common and unique to each genotype
+ftable(QUAL40[,c("IMB211_gt","R500_gt")])
+```
+
+**Exercise 3**
+**a) Which SNPS would be most useful for a downstream QTL analysis of F2 progeny generated from a cross of IMB211 and R500? (Ignore the allele categories that have “2”, “3”, or “4”). Hint: you want SNPs that will unambiguously distinguish a locus as coming from IMB211 or R500.**
+
+We want the SNPS with 1/1 and 0/0 for homozygous, which will be most helpful for progeny analysis.
+
+**b) Subset the data frame so that you only have these SNPs.**
+```{r}
+qIMB0<-subset(vcf.data, IMB211_gt=="0/0" & R500_gt=="1/1") 
+qR0<-subset(vcf.data, R500_gt=="0/0" & IMB211_gt=="1/1") 
+```
+**c) How many SNPS are retained?**
+
+11141 SNPS from qIMB0 
+
+11141/55088=20.2%
+
+9210 SNPS from qR0
+
+9210/55088= 16.7%
+
+Total: 20351/55088
+
+36.9%
+
+**Exercise 4**
+**a) Using the higher quality SNP list, plot the position along the chromosome of each SNP (x axis), read depth (R500 and IMB211 combined) (y axis).**
+
+```{r}
+IMB_R<-subset(QUAL40, select=c("POS", "IMB211_tot.depth","R500_tot.depth"))
+library(reshape2)
+IMB_R.melt<- melt(IMB_R, id.vars=c("POS"))
+ggplot(IMB_R.melt,aes(x=POS, y=value, color=variable)) + geom_point(alpha = 0.5 )
+```
+
+Optional: color each SNP for whether it is R500 specific, IMB specific, or common.
+
+**b) Use the help function to learn about xlim(). Use this function to plot only the region between 20,000,000 and 25,000,000 bp. Why might there be gaps with no SNPs?**
+
+```{r}
+help(xlim) #chose "set scale limits" in the ggplot2 package
+ggplot(IMB_R.melt,aes(x=POS, y=value, color=variable)) + geom_point(alpha = 0.5 )+xlim(20000000, 25000000)
+```
+
+We may have some error in our SNP data that account for the gaps. Also some SNPs are not homologous or are not present in our data. 
+
+---
+title: "Assignment 6 RNAseqPart 1"
+output: html_document
+---
+
+__Name:__ Eliza Tsang
+__Student ID:__ 999606858
+
+```{r}
+library(rtracklayer)
+gff <- import.gff("Brapa_reference/Brapa_gene_v1.5.gff")
+gff 
+
+#create a column "gene_id" that contains the gene name for every entry
+gff$gene_id <- ifelse(is.na(gff$ID),gff$Parent,gff$ID)
+
+export(gff,"Brapa_reference/Brapa_gene_v1.5.gtf",format="gtf")
+```
+
+```{r}
+library(Rsubread)
+readCounts <- featureCounts(
+  files=c("../Assignment_5_Tsang.Eliza/tophat_out-IMB211_All_A01_INTERNODE.fq/accepted_hits_A01.bam",
+    "../Assignment_5_Tsang.Eliza/tophat_out-R500_All_A01_INTERNODE.fq/accepted_hits_A01.bam"),
+  annot.ext="Brapa_reference/Brapa_gene_v1.5.gtf", 
+  isGTFAnnotationFile=TRUE,
+  GTF.featureType="CDS", # This depends on GTF file.  Often it would be "exon"
+  GTF.attrType="gene_id"
+  )
+
+```
+
+__Exercise 1__  
+**Read the help file for feature counts.  Be sure to look at the section "Value" where it describes the output.**
+
+```{r}
+help("featureCounts")
+```
+
+__a)__ **Provide a line of code that displays the counts of the first 6 genes.  (It is not very interesting because the first genes in the file are on chromosome A03 (strange numbering...) and our bam file only has counts from A01...  )**
+
+```{r}
+summary(readCounts)
+readCounts$annotation
+head(readCounts$annotation)
+```   
+
+__b__ **The gene `Bra011030` is on chromosome A01.  What are its read counts in the two files?**
+
+```{r}
+R011030<-system("grep 'Bra011030' ../Assignment_5_Tsang.Eliza/tophat_out-R500_All_A01_INTERNODE.fq/accepted_hits_A01.bam")
+R011030
+
+IMB11030<-system("grep 'Bra011030'../Assignment_5_Tsang.Eliza/tophat_out-IMB211_All_A01_INTERNODE.fq/accepted_hits_A01.bam")
+IMB11030
+```
+
+__c__ What percentage of reads (from each file) were assigned to a gene?  What percentage were unassigned because they were not located in a gene (aka "Feature")?  
+
+ File 1: ../Assignment_5_Tsang.Eliza/tophat_out-IMB211_All_A01 ... ||
+    
+    Total reads : 1974510                                               
+    
+    Successfully assigned reads : 1601807 (81.1%) 
+    
+ File 2: ../Assignment_5_Tsang.Eliza/tophat_out-R500_All_A01_I ... ||
+   
+    Total reads : 2191853                                                 
+    Successfully assigned reads : 1776266 (81.0%)    
+    
+Features : 206584; 
+Meta-features : 41020 
+
+```{r}
+ 206584/(2191853+1974510)
+```
+
+__d__ What are 2 possible reasons why there are reads that cannot be assigned to a gene?  
+
+__Exercise 2__  
+
+__a)__**Create a new object in R called `counts.data` with either the leaf data or the internode data.  **
+
+```{r}
+counts.data <- counts.data[rownames(counts.data)!="*",]
+counts.data[is.na(counts.data)] <- 0
+```
+
+__b__. Check to make sure that the data looks as expected.  (What do you expect and how do you confirm?  Show your commands and output.)
+
+__Exercise 3__  
+The column names are too long.  Use the `sub()` command to remove the ".1_matched.merged.fq.bam" suffix from each column name.  Although it doesn't matter in this case, using the argument "fixed=TRUE" is a good idea because "." is a wildcard character.
+
+__Exercise 4__  
+__a.__ Make a histogram of counts for each of the samples.  
+__b.__ Is the data normally distributed?  Apply an appropriate transformation if needed and make a new set of histograms.  
+__Hint 1__: _see the use of the `melt()` function in the Rice-SNP lab_.  __Hint 2__: _You can transform the axes in ggplot by adding `scale_x_log10()` or `scale_x_sqrt()` to the plot.  One of these should be sufficient if you need to transorm, but for other ideas see the [Cookbook for R page](http://www.cookbook-r.com/Graphs/Axes_%28ggplot2%29/#axis-transformations-log-sqrt-etc)_.  
+
+__Exercise 5:__  
+We expect that read counts, especially from biological replicates, will be highly correlated.  Check to see if this is the case using the `pairs()` function and the `cor()` function.  Explain what each of these functions does and comment on the results.  __Important Hint:__ _`pairs` is slow on the full dataset.  Try it on the first 1,000 genes.  Do you need to transform to make the pairs output more meaningful?_
+
+__Exercise 6__  
+Discuss the MDS plot.  Does it give you confidence in the experiment or cause concern?
+
+__Exercise 7__  
+To get a graphical idea for what the normalization does, make box plots of the count data for each sample before and after normalization.  Discuss the effect of normalization.
+
+__Hint 1__: _log2 transform the counts before plotting.  Add a value of "1" before log2 transforming to avoid having to take the log2 of 0.  Your transformation will look something like this:
+
+```{r}
+counts.data.log <- log2(counts.data + 1)
+```
+
+__Hint 2__: _If you don't want to bother with melting before going to ggplot, you can just use the `boxplot()` function and feed it the (transformed) matrix directly._
+
+
+
+__Exercise 8__  
+__a__.  Find all genes differentially expressed in response to the DP treatment (at a FDR < 0.01).  
+__b__.  How many genes are differentially expressed?
+__c__.  Make a plot of the top 9
+
+
+__Exercise 9__:  
+__a__. Repeat the dispersion estimates and model fit but with the new model.  Show code.  
+__b__. How many genes show a significantly different response to treatment in IMB211 as compared to R500?  Save these genes to a file.  
+__c__. Make a plot of the top 9 genes that have a significantly different response to treatment in IMB211 as compared to R500.  
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+Bam to read counts
+As you know from last week’s lab, we mapped RNAseq reads to the B. rapa genome. In order to ask if reads are differentially expressed between cultivars (IMB211 vs. R500) or treatments (dense planting vs. non-dense planting) we need to know how many reads were sequenced from each gene.
+
+To do this we use the bam files (telling us where in the genome the reads mapped) and the .gtf file that we just generated (telling us where the genes are) to figure out which reads belong to which genes. Thankfully the Rsubread package does this for us. An alternative workflow (not used here) would be to use the python package HTSeq. Yet another alternative would have been to map our reads to cDNA fasta files and then use samtools idxstats on the bam file.
+
+But for this lab we will use Rsubread on the two files from Thursday. You will need to change the path listed below to make this work. Important: tilde expansion for your home directory will not work in this function. Do not include a “~” in your path. Use relative or the full absolute path
